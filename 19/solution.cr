@@ -4,17 +4,27 @@ class Result
 end
 
 abstract class Automaton
-  abstract def consume(in : String, p : Int32) : Result
+  abstract def _consume(in : String, p : Int32) : Array(Result)
+
+  def consume(in : String, pointers : Array(Int32)) : Array(Result)
+    valid_pointers = pointers.reject { |p| p >= in.size }
+    results = valid_pointers.flat_map { |pointer| _consume(in, pointer) }
+    results.reject { |r| r.pointer > in.size }.select { |r| r.success }
+  end
+
+  def consume(in : String, pointer : Int32) : Array(Result)
+    consume(in, [pointer])
+  end
 end
 
 class TerminalAutomaton < Automaton
   def initialize(@character : Char); end
 
-  def consume(input : String, pointer : Int32) : Result
+  def _consume(input : String, pointer : Int32) : Array(Result)
     if input[pointer] == @character
-      Result.new(true, pointer + 1)
+      [Result.new(true, pointer + 1)]
     else
-      Result.new(false)
+      [Result.new(false)]
     end
   end
 end
@@ -22,12 +32,13 @@ end
 class RefAutomaton < Automaton
   def initialize(@reflist : Array(Int32), @automata : Hash(Int32, Automaton)); end
 
-  def consume(input : String, pointer : Int32) : Result
-    init_result = Result.new(true, pointer)
-    @reflist.reduce(init_result) do |result, ref|
-      next result unless result.success
+  def _consume(input : String, pointer : Int32) : Array(Result)
+    init_result = [Result.new(true, pointer)]
+    @reflist.reduce(init_result) do |results, ref|
+      successful = results.select { |r| r.success }
+      next successful if successful.empty?
 
-      @automata[ref].consume(input, result.pointer)
+      @automata[ref].consume(input, results.map { |r| r.pointer })
     end
   end
 end
@@ -35,10 +46,11 @@ end
 class AlternativeAutomaton < Automaton
   def initialize(@left : Automaton, @right : Automaton); end
 
-  def consume(input : String, pointer : Int32) : Result
-    lresult = @left.consume(input, pointer)
-    return lresult if lresult.success
-    @right.consume(input, pointer)
+  def _consume(input : String, pointer : Int32) : Array(Result)
+    lresults = @left.consume(input, pointer)
+    rresults = @right.consume(input, pointer)
+
+    (lresults + rresults).select{ |r| r.success }
   end
 end
 
@@ -55,12 +67,20 @@ def parse_automaton_def(definition : String)
   end
 end
 
-def run
+def run(part = 1)
   mode = :def
   matched = 0
   File.each_line("input") do |line|
     if line.empty?
       mode = :input
+      
+      if part == 2
+        # 8: 42 | 42 8
+        # 11: 42 31 | 42 11 31
+        LIST[8] = AlternativeAutomaton.new(RefAutomaton.new([42], LIST), RefAutomaton.new([42, 8], LIST))
+        LIST[11] = AlternativeAutomaton.new(RefAutomaton.new([42,31], LIST), RefAutomaton.new([42,11,31], LIST))
+      end
+
       next
     end
 
@@ -70,7 +90,8 @@ def run
       LIST[label.to_i] = parse_automaton_def(rest)
     else
       re = LIST[0].consume(line, 0)
-      matched += 1 if re.success && re.pointer == line.size      
+      valid = re.select {|r| r.success && r.pointer == line.size}
+      matched += 1 unless valid.empty?     
     end
   end
 
@@ -78,3 +99,5 @@ def run
 end
 
 run
+
+run(2)
