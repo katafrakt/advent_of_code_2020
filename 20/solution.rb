@@ -38,9 +38,11 @@ class Tile
 
     add_variants.()
 
-    lines = lines.reverse.transpose.reverse
+    lines = lines.transpose.reverse.transpose
 
     add_variants.()
+
+    variants.uniq!
 
     new(label, variants)
   end
@@ -65,27 +67,25 @@ class Entry
     @label = label
     @variant = variant
   end
-
-  def to_s
-    "#{label}: #{@variant.values.join(',')}"
-  end
 end
 
-input = File.read("test")
+
+input = File.read("input")
 tiles = input.split("\n\n").map { |i| Tile.from_input(i) }
 
 candidates = tiles.flat_map do |t|
   t.variants.map {|v| [Entry.new(t.label, v)]}
 end.uniq
-puts candidates
+
+SIDE = 12
 
 cur_pos = [0,1]
-8.times do
+(SIDE*SIDE-1).times do
   candidates.map! do |c|
     used_tiles = c.map(&:label)
     
     if cur_pos[0] >= 1
-      to_north = c[cur_pos[0]*3 + cur_pos[1] - 3]
+      to_north = c[cur_pos[0]*SIDE + cur_pos[1] - SIDE]
     end
 
     if cur_pos[1] >= 1
@@ -103,11 +103,11 @@ cur_pos = [0,1]
   end.reject!(&:empty?)
 
   cur_pos[1] += 1
-  if cur_pos[1] == 3
+  if cur_pos[1] == SIDE
     cur_pos[1] = 0
     cur_pos[0] += 1
   end
 end
 
 l = candidates.last
-puts l[0].label * l[2].label * l[6].label * l[8].label
+puts l[0].label * l[SIDE-1].label * l[SIDE*(SIDE-1)].label * l[SIDE*SIDE-1].label
